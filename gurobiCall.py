@@ -16,6 +16,9 @@ KD_officer_preference = pd.read_csv('KDPrefs.csv')
 #KD_officer_preference = KD_officer_preference.T
 KD_officer_preference = KD_officer_preference[-86:]
 
+
+
+
 KD_prefs = {}
 C={}
 
@@ -48,7 +51,7 @@ for assignment in range(0,86):
 	m.addConstr(quicksum(x[(officer,assignment)] for officer in range(74,160)),GRB.EQUAL,1)
 
 m.update()
-m.write("out.lp")
+#m.write("out.lp")
 m.optimize()
 
 #sol=""
@@ -63,5 +66,5 @@ for v in m.getVars():
 			#sol += v.varName + "=" + str(v.x)+"\n" 
 			sol[int(v.varName[1:4])] = v.varName[-2:]
 #print sol
-#print unassigned
+print unassigned
 print sol

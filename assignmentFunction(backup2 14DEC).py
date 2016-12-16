@@ -38,8 +38,6 @@ def setup():
 #setup for use as a stack (pop/append) in reverse preference order.
 #Stack contains sublists for each level of indifference (weak preference order)
 def SMAGetPrefs():
-
-
     import numpy as np
     import pandas as pd
     raw_pref = pd.read_csv('RawPreferences2.csv')#, dtype='str')
@@ -55,14 +53,48 @@ def SMAGetPrefs():
     Officers = list(set().union(KD_Off,B_Off))
     Assignments = list(set().union(KD_Ass, B_Ass, D_Ass))
 
-    for o in KD_Off:
-	d_kd = raw_pref.iloc[o,KD_Ass]
-	p_kd[o] = KD_D_Ass + list(map(int,d_kd.sort_values(ascending=False).index))
     for o in Officers:
+	p_kd[o] = []
+	p_b[o] = []
+		
+	d_kd = raw_pref.iloc[o,KD_Ass]
+	print list(map(int,d_kd.order().index))
 	d_b = raw_pref.iloc[o,B_Ass]
-	d_b = list(map(int,d_b.sort_values(ascending=False).index))
-	p_b[o] = D_Ass + d_b
+	end =[]
+
+	#build KD pref list- in raw, min=0, max=137
+	for i in sorted(range(0,138), reverse = True):
+	    #Find all indices with same preference value
+    	    a = list(np.where(d_kd==str(i))[0]) + list(np.where(d_kd==i)[0])
+	    if len(a) >0:
+	        end.append(d_kd[a].index[0])
+
+	#first no assignment
+	p_kd[o]+=KD_D_Ass	
+	#then Nulls/missing values
+	nulls = list(map(int,d_kd[d_kd.isnull()].index))
+	if nulls:
+	    p_kd[o] += nulls
+	#then add in reverse preference order	
+	if end:
+	    p_kd[o] += end 
+	#p[o] is now a "stack" with iso-preference lists to which
+	#Officer o is indifferent
+
+	#build B pref list
+	end =[]
+	for i in sorted(range(0,138), reverse = True):
+	    a = list(np.where(d_b==str(i))[0]) + list(np.where(d_b==i)[0])
+	    if len(a) >0:
+	        end.append(map(int,d_b[a].index[0]))
 	
+	p_b[o]+= B_Ass
+	nulls = list(map(int,d_b[d_b.isnull()].index))
+	if nulls:
+	    p_b[o] += nulls
+	if end:
+	    p_b[o] += end 
+
     save_obj(p_kd, 'p_kd')
     save_obj(p_b, 'p_b')
 
@@ -106,313 +138,7 @@ def LPGetC():
 	    else: #mildly infeasible, no KD prefs avail
 		C[(o,a)]= 999
     save_obj(C,'C')
-
-#SMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMA
-# SMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMA
-
-def SMA(allowableChanges):
-    import random as rnd
-    sol = Solution([0,0], 1, 0)	
-    #try:
-    if 1:
-        #sets
-        KD_Off= range(74,160)
-        KD_Ass= range(0,71)
-	B_Off = range(0, 74)
-	B_Ass = range(73,139)
-	D_Ass = range(139, 162)	
-	Officers = list(set().union(KD_Off,B_Off))
-	Assignments = list(set().union(KD_Ass, B_Ass))
-
-	#Match KD Assignments
-	KD_D_Ass = D_Ass[0:15]
-	p_kd = load_obj('p_kd')
-	p_b = load_obj('p_b')
-	yg = load_obj('yg')
-	y = load_obj('y')
-	smaA = load_obj('smaA')
-	#need opref and apref
-	KD_OtoA = {}
-	BOtoA = {}
-
-	#allowableChanges[0]: Assignment Restrictions	
-	availO = set(Officers)	
-	restrictions = rnd.sample(list(availO), allowableChanges[0])
-	for restriction in restrictions:
-	    res_list = rnd.sample(Assignments, int(rnd.uniform(.05,.1) * len(Assignments)))
-	    #print res_list
-	    for ass in res_list:
-		if ass in KD_Ass and restriction in KD_Off:
-		    p_kd[restriction].remove(ass)
-		    p_kd[restriction] = [ass] + p_kd[restriction]
-		elif ass in B_Ass:
-		    p_b[restriction].remove(ass)
-		    p_b[restriction] = [ass] + p_b[restriction]
-		else:
-                    pass	        
-
-
-
-	#allowableChanges[1]: Directed Assignment
-	taken = []
-	x = {}
-	availO -= set(restrictions)
-	availA = set().union(KD_Ass, B_Ass, D_Ass)
-        directeds = rnd.sample(list(availO), allowableChanges[1])
-	for directed in directeds:
-	    #if directed in KD_Off:
-		#KD_Off.remove(directed)
-	    #else:
-		#B_Off.remove(directed)
-	    x[directed]=rnd.sample(list(availA), 1)[0]
-	    if directed in KD_Off:
-		x[directed]=rnd.sample(list(set(availA)-set(B_Ass)), 1)[0]
-		KD_OtoA[directed] = x[directed]	
-	    else:
-		x[directed]=rnd.sample(list(set(availA)-set(KD_Ass)), 1)[0]
-            	BOtoA[directed] = x[directed]
-	    taken += [x[directed]]
-	    availA -= set(taken)
-
-
-	#allowableChanges[2]: Rejected Match
-	availO -= set(directeds)
-	rejects = []
-	while len(rejects) < allowableChanges[2]:
-	    reject = rnd.sample(list(availO), 1)[0]
-	    if int(smaA[reject]) != 999:
-		rejects.append(reject)
-		availO.remove(reject)
-		if reject in KD_Off and smaA[reject] in KD_Ass:
-		    p_kd[reject].remove(smaA[reject])
-		    p_kd[reject] = [smaA[reject]] + p_kd[reject]
-		else: #if reject in KD_Off and smaA[reject] in B_Ass:		
-		    p_b[reject].remove(smaA[reject])
-		    p_b[reject] = [smaA[reject]] + p_b[reject]
-
-
-			
 		
-	del availO
-	del availA
-
-	#Starting KD matching 
-	opref = {}
-	apref = {}
-	unmatched = list(set(KD_Off)-set(directeds)) #listing of unmatched officers
-	noKD = [] #bookkeeping for KD Officers not getting a KD Assignment
-	#kdNotTaken = list(set().union(set(KD_Ass),set(KD_D_Ass) )- set(taken))
-	#for o in KD_Off:
-
-	
-	for assignment in KD_Ass:
-	    apref[assignment] = {}
-	    preference = 0
-	    for year in sorted(yg.keys()):
-		preference += 1
-		for officer in yg[year]:
-		    apref[assignment][officer] = preference
-	for o in directeds:
-	    if x[o] in KD_Ass:
-		apref[x[o]][o] = -9999
-		
-	for assignment in KD_D_Ass:
-	    apref[assignment] = {}
-	    for officer in KD_Off:
-		opref[officer] = p_kd[officer]
-	        KD_OtoA[officer] = -1
-		apref[assignment][officer] = -y[officer] #tour equity? yg?
-	
-	while unmatched:
-	    #officer = rnd.choice(unmatched)
-	    officer = unmatched.pop()
-	    #try:
-	    if len(opref[officer]) >1:
-		possibility = opref[officer].pop()
-	    else:
-		intersect = (set(KD_Ass).union(set(KD_D_Ass)))-set(KD_OtoA.values())
-		possibility = rnd.choice(list(intersect))
-	    	#print "intersect meth:" + str(intersect) + '\t'+str(possibility)
-		#print directeds	
-		#print x	
-		#print possibility not in taken
-		#print officer not in rejects or possibility != smaA[officer]
-		try:
-		    incumbent = KD_OtoA.keys()[KD_OtoA.values().index(possibility)]
-		except ValueError:
-		    incumbent = -1	
-		#print "i:" + str(incumbent)
-		break
-	    #except IndexError:
-#		print "IndexError"		
-#		if unmatched == []:
-#		    
-#		    KD_OtoA[officer] = list(intersect)[0]
-#		    break
-#		else:
- #		    pass
-
-
-		
-
-#		if len(kdNotTaken) >0:
-#		    possibility = rnd.choice(kdNotTaken)
-#		else:
-#		    
-#		    intersect = set(KD_Ass).union(set(KD_D_Ass))-set(KD_OtoA.values())-set([-1])
-#		    print 'unmatched:'+str(unmatched)
-#		    print intersect
-#		    if len(intersect)>0:
-#		        KD_OtoA[officer]= list(intersect)[0]
-#		        taken += [KD_OtoA[officer]]  
-#		    print "Fatal error?"   
-#		    print str(officer) + str(KD_OtoA[officer])
-#		    print "KD Avail:" + str(kdNotTaken)
-#		    override = True
-			
-
-	    #condition1 = possibility not in taken
-	    #condition2 = 
-	    if officer not in rejects or possibility != smaA[officer]:
-		possibilitypref = apref[possibility]
-      	        try:
-		    incumbent = KD_OtoA.keys()[KD_OtoA.values().index(possibility)]
-		except ValueError:
-		    incumbent = -1
-			
-
-		#no incumbent	
-		if incumbent == -1:
-		    #unmatched.remove(officer)			
-		    KD_OtoA[officer] = possibility
-		    #kdNotTaken.remove(possibility)# += [possibility]
-		    if possibility in KD_D_Ass:
-		        noKD.append(officer)
-				
-		#if assignment prefers officer to incumbent	
-	 	elif possibilitypref[officer] < possibilitypref[incumbent]:
-		    KD_OtoA[incumbent] = -1
-		    if possibility in KD_D_Ass:
-			noKD.remove(incumbent)
-			noKD.append(officer)
-		    unmatched.append(incumbent)
-		    KD_OtoA[officer] = possibility
-		    #unmatched.remove(officer)	
-		else:
-		    unmatched = [officer] + unmatched
-	    else:
-		unmatched = [officer] + unmatched
-
-#-----------------------------------------
-	del p_kd	#other garbage cleanup
-	del yg
-
-
-	#Setup for Broad. Matching
-	opref = {}
-	apref = {}
-
-	btaken = list(taken)
-	p_b = load_obj('p_b')
-	unmatched = list(set(noKD + B_Off)-set(directeds))
-	for o in unmatched:
-	    opref[o] = p_b[o]
-	    BOtoA[o] = -1
-	
-	for assignment in B_Ass:
-	    apref[assignment]={}
-	    for officer in unmatched:
-		if officer in B_Off:
-		    apref[assignment][officer] = 1
-		else:
-		   apref[assignment][officer] = 2   
-	
-   	for assignment in D_Ass:
-	    apref[assignment] = {}
-	    for officer in unmatched:
-		apref[assignment][officer] = 0
-	
-	for o in directeds:
-	    if x[o] in B_Off:
-		apref[x[o]]= apref[160]
-		apref[x[o]][o] = -9999
-
-	while unmatched: #implict boolean false for empty list
-	    #officer = rnd.choice(unmatched)
-	    officer = unmatched.pop()
-	    try:
-		possibility = opref[officer].pop()
-	    except IndexError:
-		#empty list
-		availO = set(B_Ass+D_Ass)-set(btaken)
-		if len(availO) >0:
-		    possibility = rnd.choice(list(availO))
-		else:
-		    pass		
-		    #print "Fatal Error2?"
-		    #print unmatched
-		    #print sorted(list(availO))
-		    #print sorted(taken)
-
-
-	    condition1 = possibility not in taken
-	    condition2 = officer not in rejects or possibility != smaA[officer]
-	    if condition1 and condition2:
-	        possibilitypref = apref[possibility]
-    	        try:
-		    incumbent = BOtoA.keys()[BOtoA.values().index(possibility)]
-
-	    
-	        except ValueError:
-		    incumbent = -1
-	        if incumbent == -1:
-		    #unmatched.remove(officer)	
-		    btaken += [possibility]		
-		    BOtoA[officer] = possibility
-				
-	        #if assignment prefers officer to incumbent	
- 	        elif possibilitypref[officer] < possibilitypref[incumbent]:
-		    BOtoA[incumbent] = -1
-		    unmatched.append(incumbent)
-		    BOtoA[officer] = possibility
-		    #unmatched.remove(officer)	
-
-		else:
-		    unmatched.append(officer)
-	    else:
-		unmatched.append(officer)
-
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++
-	for o in KD_Off:
-	    if o in noKD:
-		x[o] = BOtoA[o]
-	    else:
-		x[o] = KD_OtoA[o]
-	for o in B_Off:
-	    x[o] = BOtoA[o]
-	    #print "O:"+str(o)+" A:"+str(KD_OtoA[o])
-	sol.finalSolution = []
-	Officers = list(set().union(KD_Off,B_Off))
-	for i in Officers:
-	    if x[i] in D_Ass:
-	   	sol.finalSolution.append(int(999))
-	    else:	
-	        sol.finalSolution.append(x[i])
-
-	sol.resultStatusFlag = 0
-	#save_obj(sol.finalSolution, 'smaA') #saved first time, used later
-		
-	sol.changes = [sum(i != j for i, j in zip(sol.finalSolution, smaA))]
-
-    #except IndexError:
-    #	print "Index Error"        
-    #	sol = Solution(-1* np.ones(160), -1, -1)	
-	
-    return sol
-
-#AFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAF
-#AFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAFAF
 
 def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
     #from math import floor, sqrt
@@ -432,7 +158,141 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
     
 
     elif methodFlag == 1: #SMAColdstart
-	sol = SMA(allowableChanges)
+	
+
+        #sets
+        KD_Off= range(74,160)
+        B_Off = range(0, 74)
+        KD_Ass= range(0,71)
+        B_Ass = range(73,139)
+        D_Ass = range(139, 162)
+	#Officers = list(set().union(KD_Off,B_Off))
+	#Assignments = list(set().union(KD_Ass, B_Ass, D_Ass))
+
+
+	#Match KD Assignments
+	KD_D_Ass = D_Ass[0:15]
+	p_kd = load_obj('p_kd')
+	yg = load_obj('yg')
+	#need opref and apref
+	
+	n = len(KD_Off)
+	#rankO = np.zeros(n+1).tolist() #Officer to assignment currO[assignment]
+	#rankO = [-1]*(n)
+	#provides ordinal ranking of how far "down" each officers list is current match
+	#rankA = [-1]*(n)
+	KD_OtoA = {}
+
+	
+	opref = {}
+	apref = {}
+	for o in KD_Off:
+	    opref[o] = p_kd[o]
+	    KD_OtoA[o] = -1
+	
+	for assignment in KD_Ass:
+	    apref[assignment] = {}
+	    preference = 0
+	    for year in sorted(yg.keys()):
+		preference += 1
+		for officer in yg[year]:
+			apref[assignment][officer] = preference
+#	for assignment in B_Ass:
+#	    apref[assignment]=[0]*(n)
+#	    for officer in KD_Off:
+#		apref[assignment][officer] = 2
+#	    for officer in B_Off:
+#		apref[assignment][officer] = 1
+#	
+#	for assignment in KD_D_Ass:
+#	    apref[assignment] = [0]*(n)
+
+	unmatched = KD_Off #listing of unmatched officers
+	noKD = [] #bookkeeping for KD Officers not getting a KD Assignment
+	nextKD_D = KD_D_Ass.pop()	
+	
+	while unmatched: #implict boolean false for empty list
+	    #find first unmatched officer)
+	    officer = rnd.choice(unmatched)	# = rankA[1:].index(0)+1
+	    #rankA[officer] = rankA[officer] + 1
+	    #don't loop, choose next best.
+	    
+	    #if len(opref[officer]) > 1:
+	    #	possibilities = opref[officer].pop()
+	    #else:
+	    #	possibilities = opref[officer]	
+	    while 1:
+		try:		
+		    possibilities = opref[officer].pop()
+		except IndexError:
+		    KD_OtoA[officer] = nextKD_D
+		    nextKD_D = KD_D_Ass.pop()				
+		    break
+		if len(possibilities) > 0:
+	            possibility = rnd.choice(possibilities)
+		    possibilities.remove(possibility)
+	        if not possibilities:
+		    opref[officer].append(possibilities)
+		if possibility in KD_Ass:
+		    break	        
+
+		
+
+            print possibility
+
+	    print "-----\nO:" + str(officer)
+	    print "p:-----"
+	    print possibilities
+	    
+	    #if len(possibilities) >= 1:
+	    #	possibility = rnd.choice(possibilities)
+	    #	possibilities.remove(possibility)	    
+	    #else:
+	    #	possibility = possibilities[0]
+	   
+	    
+	    if len(possibilities) > 0: 
+	    #if sublist not empty, replace on stack
+		opref[officer].append(possibilities)
+	    
+	    #change to rank++ below
+	    try:
+	        possibilitypref = apref[possibility]
+	    except KeyError:
+		print "KEYERROR!"
+		break
+
+    	    try:
+		#incumbent = KD_OtoA.index(possibility)
+		incumbent = KD_OtoA.keys()[KD_OtoA.values().index(possibility)]
+
+	    except ValueError:
+		incumbent = -1
+		#no incumbent	
+	    if incumbent == -1:
+		unmatched.remove(officer)			
+		rankO[possibility] = possibilitypref[officer]
+		KD_OtoA[officer] = possibility #rankA[officer] = possibility
+				
+				
+	     #if assignment prefers officer to incumbent	
+ 	    elif possibilitypref[officer] > possibilitypref[incumbent]:
+	    #match officer to possibility
+	    #break match of possibility if needed
+		KD_OtoA[incumbent] = -1
+		unmatched.append(incumbent)
+		KD_OtoA[officer] = possibility
+		rankO[possibility] = possibilitypref[officer]
+		unmatched.remove(officer)	
+
+	    #elif possibilitypref[officer] == possibilitypref[incumbent]:
+		
+		
+	print KD_OtoA
+	sol.finalSolution = KD_OtoA
+	sol.resultStatusFlag = 0
+	sol.changes = 0	
+	#save_obj(OtoA, 'smaA')
 
     elif methodFlag == 2: #LPWarmstart
 	kd_m = gp.Model()	
@@ -718,6 +578,7 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	    sol.finalSolution = sol.finalSolution.astype(int)
 	    sol.resultStatusFlag = 0 #Good Execution
 	    #save_obj(sol.finalSolution, 'lpA') #saved locally first time and referenced later
+	    #lpA = load_obj('lpA')
 	    sol.changes = sum(i != j for i, j in zip(sol.finalSolution, lpA))
         except:
 	    sol = Solution(-1* np.ones(160), -1, -1) 

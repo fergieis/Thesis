@@ -1,0 +1,33 @@
+#A <- read.csv("~/Desktop/Thesis/exData2.csv")
+A <- read.csv("~/Desktop/Thesis/exDatacleaned.csv")
+
+library(agricolae)
+
+restrictions <- factor(A$restrictions)
+directeds <- factor(A$directeds)
+rejects <- factor(A$rejects)
+method = factor(A$method)
+
+changes <- as.numeric(A$changes)
+time <- as.numeric(A$time)
+
+
+m = aov(changes~rejects+directeds+restrictions)
+
+#l<- matrix(c(1,2,3,4), 2, 2, byrow = TRUE)
+#layout(l)
+anova(m)
+#heavy tailed
+
+
+A$changes[A$changes==-1] <-NA
+changes.mean <-tapply.stat(A$changes, A$method, function(x) mean(x,na.rm=TRUE))
+
+m3 = aov(changes~method+restrictions+directeds+rejects)
+scheffe.test(m3,"method", alpha=.05, console=TRUE)
+TukeyHSD(m3, ordered=FALSE, conf.level = .05)
+
+#m4 = aov(changes~method+totalpur)
+
+
+

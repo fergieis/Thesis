@@ -20,13 +20,15 @@ class Solution:
 	#self.computationTime = cT
 	self.resultStatusFlag = rSF
 	self.changes= c
+	self.obj = 0.0
 	#self.resultStatusMsg = ...
 
     def __str__(self): #when called via print
-	return str([self.finalSolution, self.resultStatusFlag, self.changes])
+	return str([self.finalSolution, self.obj, self.resultStatusFlag, self.changes])
 	
     def __repr__(self): #when called interactively
-	return str([self.finalSolution, self.resultStatusFlag, self.changes])
+	return str([self.finalSolution, self.obj, self.resultStatusFlag, self.changes])
+
 
 def setup():
     SMAGetPrefs()
@@ -82,7 +84,7 @@ def LPGetYearGroup():
 	    yg[year]=[o]
     save_obj(yg,'yg')
 
-#Generates 'C.pkl' file containing yeargroup list. 
+#Generates 'C.pkl' file containing cost coefficient list. 
 #Only needs to be run once on a machine
 def LPGetC():
     KD_Off= range(74,160)
@@ -131,7 +133,6 @@ def SMA(allowableChanges):
 	yg = load_obj('yg')
 	y = load_obj('y')
 	smaA = load_obj('smaA')
-	#need opref and apref
 	KD_OtoA = {}
 	BOtoA = {}
 
@@ -395,7 +396,7 @@ def SMA(allowableChanges):
 	sol.finalSolution = []
 	Officers = list(set().union(KD_Off,B_Off))
 	for i in Officers:
-	    if x[i] in D_Ass:
+	    if x[i] in D_Ass or x[i] == -1:
 	   	sol.finalSolution.append(int(999))
 	    else:	
 	        sol.finalSolution.append(x[i])
@@ -403,7 +404,7 @@ def SMA(allowableChanges):
 	sol.resultStatusFlag = 0
 	#save_obj(sol.finalSolution, 'smaA') #saved first time, used later
 		
-	sol.changes = [sum(i != j for i, j in zip(sol.finalSolution, smaA))]
+	sol.changes = [sum(i != j for i, j in zip(sol.finalSolution, smaA))][0]
 
     #except IndexError:
     #	print "Index Error"        
@@ -445,7 +446,10 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
         KD_Ass= range(0,71)
         B_Ass = range(73,139)
         D_Ass = range(139, 162)
+	D_KD_Ass = range(139,154)
+	
 	Officers = list(set().union(KD_Off,B_Off))
+	KD_Assignments = list(set().union(KD_Ass,D_KD_Ass))	
 	Assignments = list(set().union(KD_Ass, B_Ass, D_Ass))
 	
         #handlemods
@@ -484,51 +488,51 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	#Phase I, slot KD Offs/objective  f_1
 	x={}
 	for o in KD_Off:
-	    for a in KD_Ass:
+	    for a in KD_Assignments:
 		x[(o,a)] = kd_m.addVar(vtype=gp.GRB.BINARY, 
 			   obj = y[o],
                            name="O{0:03d}".format(o) + 
 			   "A{0:03d}".format(a))
-		if lpA[o] == a:
-			x[(o,a)].Start = 1
-		else:
-			x[(o,a)].Start = 0
+		#if lpA[o] == a:
+		#	x[(o,a)].Start = 1
+		#else:
+		#	x[(o,a)].Start = 0
 
 	kd_m.ModelSense = gp.GRB.MINIMIZE #MINIMIZE
 
-        for a in KD_Ass:
+        for a in KD_Assignments:
             kd_m.addConstr(gp.quicksum(x[(o,a)] 
 		for o in KD_Off),gp.GRB.EQUAL,1)	
 	for o in KD_Off:
 	    if o in list(restrictions):
-		if not list(set(A_r[o])&set(KD_Ass)):
+		if not list(set(A_r[o])&set(KD_Assignments)):
 		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in list(set(A_r[o])&set(KD_Ass))), gp.GRB.EQUAL,1)
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)  
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)  
 		else:
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,0)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,0)
 	    elif o in list(directeds):
 		if A_d[o] in list(KD_Ass):
-	            kd_m.addConstr(x[o,A_d[o]], gp.GRB.EQUAL,1)
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+	            kd_m.addConstr(x[(o,A_d[o])], gp.GRB.EQUAL,1)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 		else:
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,0)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,0)
 	    elif o in list(rejects):
-		if lpA[o] in list(KD_Ass):
-		    kd_m.addConstr(x[o,int(lpA[o])], gp.GRB.EQUAL,0)
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+		if int(lpA[o]) in list(KD_Ass):
+		    kd_m.addConstr(x[(o,int(lpA[o]))], gp.GRB.EQUAL,0)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 		else:
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 	    else:
-	        kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+	        kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 
 	kd_m.update()
 	kd_m.setParam('OutputFlag', False)
 	#kd_m.write('lp.mps')
 	kd_m.optimize()
-	#print kd_m.Status
 	try:
 	    y_star = kd_m.objVal
 	except:
+	    #print "Error in y_star"    
 	    return Solution(-1* np.ones(160), -1, -1)
 	#Continue with phase2, slot everyone- obj f_2
         C = load_obj('C')
@@ -548,10 +552,10 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in A_r[o]), gp.GRB.EQUAL,1)
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	    elif o in list(directeds):
-	        bd_m.addConstr(x[o,A_d[o]], gp.GRB.EQUAL,1)
+	        bd_m.addConstr(x[(o,A_d[o])], gp.GRB.EQUAL,1)
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	    elif o in list(rejects):
-		bd_m.addConstr(x[o,lpA[o]], gp.GRB.EQUAL,0)
+		bd_m.addConstr(x[(o,int(lpA[o]))], gp.GRB.EQUAL,0)
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	    else:
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
@@ -563,21 +567,23 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	#print bd_m.Status
 	#unassigned =[]
 	sol.finalSolution = np.zeros(160)
-        try:
-	    for v in bd_m.getVars():
+        #try:
+	for v in bd_m.getVars():
 	        if v.x >0:
-	            if int(v.varName[-3:])>=140:
+	            if int(v.varName[-3:])>=139 or int(v.varName[-3:]) in [71,72]:
 	                #unassigned.append(int(v.varName[1:4]))
 		        sol.finalSolution[int(v.varName[1:4])] = 999
 		    else:		
 		        sol.finalSolution[int(v.varName[1:4])] = int(v.varName[-3:])
-	    sol.finalSolution = sol.finalSolution.astype(int)
-	    sol.resultStatusFlag = 0 #Good Execution
+	sol.finalSolution = sol.finalSolution.astype(int)
+	sol.resultStatusFlag = 0 #Good Execution
 	    #save_obj(sol.finalSolution, 'lpA') #saved locally first time and referenced later
 	    #lpA = load_obj('lpA')
-	    sol.changes = sum(i != j for i, j in zip(sol.finalSolution, lpA))
-        except:
-	    sol = Solution(-1* np.ones(160), -1, -1) 
+	sol.changes = sum(i != j for i, j in zip(sol.finalSolution, lpA))
+	sol.obj = bd_m.objVal
+
+        #except:
+	#    sol = Solution(-1* np.ones(160), -1, -1) 
 
 
 
@@ -594,7 +600,9 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
         KD_Ass= range(0,71)
         B_Ass = range(73,139)
         D_Ass = range(139, 162)
+	D_KD_Ass = range(139,154)
 	Officers = list(set().union(KD_Off,B_Off))
+	KD_Assignments = list(set().union(KD_Ass,D_KD_Ass))	
 	Assignments = list(set().union(KD_Ass, B_Ass, D_Ass))
 	
         #handlemods
@@ -633,37 +641,37 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	#Phase I, slot KD Offs/objective  f_1
 	x={}
 	for o in KD_Off:
-	    for a in KD_Ass:
+	    for a in KD_Assignments:
 		x[(o,a)] = kd_m.addVar(vtype=gp.GRB.BINARY, 
 			   obj = y[o],
                            name="O{0:03d}".format(o) + 
 			   "A{0:03d}".format(a))
 	kd_m.ModelSense = gp.GRB.MINIMIZE #MINIMIZE
 
-        for a in KD_Ass:
+        for a in KD_Assignments:
             kd_m.addConstr(gp.quicksum(x[(o,a)] 
 		for o in KD_Off),gp.GRB.EQUAL,1)	
 	for o in KD_Off:
 	    if o in list(restrictions):
-		if not list(set(A_r[o])&set(KD_Ass)):
+		if not list(set(A_r[o])&set(KD_Assignments)):
 		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in list(set(A_r[o])&set(KD_Ass))), gp.GRB.EQUAL,1)
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)  
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)  
 		else:
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,0)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,0)
 	    elif o in list(directeds):
-		if A_d[o] in list(KD_Ass):
-	            kd_m.addConstr(x[o,A_d[o]], gp.GRB.EQUAL,1)
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+		if A_d[o] in list(KD_Assignments):
+	            kd_m.addConstr(x[(o,A_d[o])], gp.GRB.EQUAL,1)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 		else:
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,0)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,0)
 	    elif o in list(rejects):
-		if lpA[o] in list(KD_Ass):
-		    kd_m.addConstr(x[o,int(lpA[o])], gp.GRB.EQUAL,0)
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+		if int(lpA[o]) in list(KD_Ass):
+		    kd_m.addConstr(x[(o,int(lpA[o]))], gp.GRB.EQUAL,0)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 		else:
-		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+		    kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 	    else:
-	        kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Ass),gp.GRB.EQUAL,1)
+	        kd_m.addConstr(gp.quicksum(x[(o,a)] for a in KD_Assignments),gp.GRB.EQUAL,1)
 
 	kd_m.update()
 	kd_m.setParam('OutputFlag', False)
@@ -673,6 +681,7 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	try:
 	    y_star = kd_m.objVal
 	except:
+	    print "Error in y_star"
 	    return Solution(-1* np.ones(160), -1, -1)
 	#Continue with phase2, slot everyone- obj f_2
         C = load_obj('C')
@@ -692,10 +701,10 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in A_r[o]), gp.GRB.EQUAL,1)
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	    elif o in list(directeds):
-	        bd_m.addConstr(x[o,A_d[o]], gp.GRB.EQUAL,1)
+	        bd_m.addConstr(x[(o,A_d[o])], gp.GRB.EQUAL,1)
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	    elif o in list(rejects):
-		bd_m.addConstr(x[o,lpA[o]], gp.GRB.EQUAL,0)
+		bd_m.addConstr(x[(o,int(lpA[o]))], gp.GRB.EQUAL,0)
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	    else:
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
@@ -707,10 +716,11 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	#print bd_m.Status
 	#unassigned =[]
 	sol.finalSolution = np.zeros(160)
+	
         try:
 	    for v in bd_m.getVars():
 	        if v.x >0:
-	            if int(v.varName[-3:])>=140:
+	            if int(v.varName[-3:])>=139 or int(v.varName[-3:]) in [71,72]:
 	                #unassigned.append(int(v.varName[1:4]))
 		        sol.finalSolution[int(v.varName[1:4])] = 999
 		    else:		
@@ -719,13 +729,29 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	    sol.resultStatusFlag = 0 #Good Execution
 	    #save_obj(sol.finalSolution, 'lpA') #saved locally first time and referenced later
 	    sol.changes = sum(i != j for i, j in zip(sol.finalSolution, lpA))
+	    sol.obj = bd_m.objVal
         except:
 	    sol = Solution(-1* np.ones(160), -1, -1) 
 
     else: #Error
 	print "Parameter Error: Invalid methodFlag"        
 	sol = Solution(-1* np.ones(160), -1, -1)	
-	
+
+    if methodFlag == 1:
+	    C = load_obj('C')
+	    sol.obj = 0
+	    for i,j in enumerate(sol.finalSolution):
+		if j == 999:
+		    pass
+		else:
+		    try:	
+			sol.obj = sol.obj + C[(i,j)]
+		    except KeyError: #infeasible solution
+			print (i,j)
+			sol.obj = -1
+
+
+    	
     return sol
 
 

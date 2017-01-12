@@ -31,8 +31,8 @@ class Solution:
 
 
 def setup():
-    SMAGetPrefs()
     LPGetYearGroup()
+    SMAGetPrefs()
     LPGetC()
 
 #Generates 'p.pkl' file containing Officer preference dictionary
@@ -93,6 +93,12 @@ def LPGetC():
     B_Ass = range(73,139)
     D_Ass = range(139, 162)
 
+    y = load_obj('y')
+    years = []
+    for i in y:
+	years.append(i-min(y))
+
+
     Officers = list(set().union(KD_Off,B_Off))
     Assignments = list(set().union(KD_Ass, B_Ass, D_Ass))
     C = {}
@@ -104,10 +110,21 @@ def LPGetC():
             if a in list(D_Ass):
 		C[(o,a)] = 0
 	    elif not np.isnan(prefs[o][a]):		
-		C[(o,a)] = prefs[o][a]	
+		if o in KD_Off and a in KD_Ass:
+		    penalty = 0
+		elif o in KD_Off and a in B_Ass:
+		    penalty = 160 * (10 - years[o])
+		elif o in B_Off and a in KD_Ass:
+		    penalty = 160 * years[o]
+	        elif o in B_Off and a in B_Ass:		
+		    penalty = 0
+		else:
+		    pass
+		C[(o,a)] = prefs[o][a] + penalty
 	    else: #mildly infeasible, no KD prefs avail
 		C[(o,a)]= 999
     save_obj(C,'C')
+
 
 #SMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMA
 # SMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMASMA  SMA  SMA
@@ -560,7 +577,8 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	    else:
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	
-	bd_m.addConstr(gp.quicksum(gp.quicksum(y[o]*x[(o,a)] for a in KD_Ass) for o in Officers), gp.GRB.LESS_EQUAL, 1.0015* y_star) 
+#	bd_m.addConstr(gp.quicksum(gp.quicksum(y[o]*x[(o,a)] for a in KD_Ass) for o in Officers), gp.GRB.LESS_EQUAL, 1.0015* y_star) 
+	bd_m.addConstr(gp.quicksum(gp.quicksum(y[o]*x[(o,a)] for a in KD_Ass) for o in Officers), gp.GRB.LESS_EQUAL, y_star)
 	bd_m.setParam('OutputFlag', False)
 	bd_m.update()
 	bd_m.optimize()
@@ -577,7 +595,7 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 		        sol.finalSolution[int(v.varName[1:4])] = int(v.varName[-3:])
 	sol.finalSolution = sol.finalSolution.astype(int)
 	sol.resultStatusFlag = 0 #Good Execution
-	    #save_obj(sol.finalSolution, 'lpA') #saved locally first time and referenced later
+	#save_obj(sol.finalSolution, 'lpA') #saved locally first time and referenced later
 	    #lpA = load_obj('lpA')
 	sol.changes = sum(i != j for i, j in zip(sol.finalSolution, lpA))
 	sol.obj = bd_m.objVal
@@ -681,7 +699,7 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	try:
 	    y_star = kd_m.objVal
 	except:
-	    print "Error in y_star"
+	    #print "Error in y_star"
 	    return Solution(-1* np.ones(160), -1, -1)
 	#Continue with phase2, slot everyone- obj f_2
         C = load_obj('C')
@@ -709,7 +727,7 @@ def assignmentFunction(allowableChanges, methodFlag): #don't need init solution
 	    else:
 		bd_m.addConstr(gp.quicksum(x[(o,a)] for a in Assignments),gp.GRB.EQUAL,1)
 	
-	bd_m.addConstr(gp.quicksum(gp.quicksum(y[o]*x[(o,a)] for a in KD_Ass) for o in Officers), gp.GRB.LESS_EQUAL, 1.0015* y_star) 
+	bd_m.addConstr(gp.quicksum(gp.quicksum(y[o]*x[(o,a)] for a in KD_Ass) for o in Officers), gp.GRB.LESS_EQUAL, y_star) 
 	bd_m.setParam('OutputFlag', False)
 	bd_m.update()
 	bd_m.optimize()
